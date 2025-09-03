@@ -1,6 +1,7 @@
-const TelegramBot = require("node-telegram-bot-api");
-const axios = require("axios");
-const { getLocalQuote, isSameDay, setMainMenu } = require("./utils");
+import { getLocalQuote, isSameDay } from "./utils/index.js";
+
+import TelegramBot from "node-telegram-bot-api";
+import axios from "axios"
 
 const TOKEN = "8327969194:AAHoPBBxnHqbNeQvl7vUg5SY2xh5lErnXm0";
 
@@ -67,6 +68,23 @@ async function getRandomQuote() {
     console.error();
     return getLocalQuote();
   }
+}
+
+//Menu
+
+export function setMainMenu(chatId) {
+  const menuOptions = {
+    reply_markup: {
+      keyboard: [[{ text: "Получить цитату" }]],
+    },
+    resize_keyboard: true,
+    one_time_keyboard: false,
+  };
+  bot.sendMessage(
+    chatId,
+    "Добро пожаловать! Нажми кнопку ниже, чтобы получить цитату.",
+    menuOptions
+  );
 }
 
 //Errors

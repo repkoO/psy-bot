@@ -1,4 +1,4 @@
-export function getLocalQuote() {
+function getLocalQuote() {
   const localQuotes = [
     {
       text: "Всё приходит вовремя для того, кто умеет ждать. — © Оноре де Бальзак",
@@ -27,7 +27,7 @@ export function getLocalQuote() {
 }
 
 //Проверка даты
-export function isSameDay(date1, date2) {
+function isSameDay(date1, date2) {
   return (
     date1.getFullYear() === date2.getFullYear() &&
     date1.getMonth() === date2.getMonth() &&
@@ -35,18 +35,4 @@ export function isSameDay(date1, date2) {
   );
 }
 
-//Генерация меню
-export function setMainMenu(chatId) {
-  const menuOptions = {
-    reply_markup: {
-      keyboard: [[{ text: "Получить цитату" }]],
-    },
-    resize_keyboard: true,
-    one_time_keyboard: false,
-  };
-  bot.sendMessage(
-    chatId,
-    "Добро пожаловать! Нажми кнопку ниже, чтобы получить цитату.",
-    menuOptions
-  );
-}
+export { getLocalQuote, isSameDay };
