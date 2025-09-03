@@ -36,14 +36,20 @@ async function getModelId() {
     console.log("Статус ответа:", response.status);
     console.log("Данные ответа:", response.data);
 
-    // Ищем модель Kandinsky в ответе
+    // Ищем модель Kandinsky в ответе - используем поле id вместо uuid
     const model = response.data.find(
       (m) =>
         m.name &&
         (m.name.includes("Kandinsky") || m.nameEn.includes("Kandinsky"))
     );
 
-    return model ? model.uuid : null;
+    if (model) {
+      console.log("Найдена модель:", model.name, "ID:", model.id);
+      return model.id; // Используем поле id вместо uuid
+    } else {
+      console.log("Модель Kandinsky не найдена в ответе");
+      return null;
+    }
   } catch (error) {
     console.error(
       "Полная ошибка при получении ID модели:",
