@@ -1,9 +1,14 @@
 import { getLocalQuote, isSameDay } from "./utils/index.js";
+import * as dotenv from "dotenv";
 
 import TelegramBot from "node-telegram-bot-api";
-import axios from "axios"
+import axios from "axios";
 
-const TOKEN = "8327969194:AAHoPBBxnHqbNeQvl7vUg5SY2xh5lErnXm0";
+dotenv.config();
+
+const TOKEN = process.env.BOT_TOKEN;
+const FBAPI = process.env.FB_API_KEY;
+const FBSECRET = process.env.FB_SECRET_KEY;
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 
