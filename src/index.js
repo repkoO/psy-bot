@@ -1,6 +1,5 @@
 import { getLocalQuote, getRandomQuote, isSameDay } from "./utils/index.js";
 import * as dotenv from "dotenv";
-
 import TelegramBot from "node-telegram-bot-api";
 import axios from "axios";
 
@@ -10,36 +9,41 @@ const TOKEN = process.env.BOT_TOKEN;
 const FBAPI = process.env.FB_API_KEY;
 const FBSECRET = process.env.FB_SECRET_KEY;
 
-const requiredEnvVars = ['BOT_TOKEN', 'FB_API_KEY', 'FB_SECRET_KEY'];
-const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+const requiredEnvVars = ["BOT_TOKEN", "FB_API_KEY", "FB_SECRET_KEY"];
+const missingVars = requiredEnvVars.filter((varName) => !process.env[varName]);
 
 if (missingVars.length > 0) {
-  console.error('❌ Отсутствуют переменные окружения:', missingVars.join(', '));
-  console.error('Проверьте файл .env');
+  console.error("❌ Отсутствуют переменные окружения:", missingVars.join(", "));
+  console.error("Проверьте файл .env");
   process.exit(1);
 }
 
-console.log('✅ Все переменные окружения загружены');
+console.log("✅ Все переменные окружения загружены");
+
+// Исправляем URL и заголовки согласно документации
+const FUSIONBRAIN_URL = "https://api-key.fusionbrain.ai/";
+const AUTH_HEADERS = {
+  "X-Key": `Key ${FBAPI}`,
+  "X-Secret": `Secret ${FBSECRET}`,
+};
 
 async function getModelId() {
   try {
-    const response = await axios.get(
-      "https://api.fusionbrain.ai/key/api/v1/pipelines",
-      {
-        headers: {
-          "X-Key": `Key ${FBAPI}`,
-          "X-Secret": `Secret ${FBSECRET}`,
-          "Content-Type": "application/json" // Добавляем этот заголовок
-        }
-      }
-    );
+    const response = await axios.get(FUSIONBRAIN_URL + "key/api/v1/pipelines", {
+      headers: AUTH_HEADERS,
+    });
 
-    // Проверяем ответ
     console.log("Статус ответа:", response.status);
     console.log("Данные ответа:", response.data);
 
-    const model = response.data.find((m) => m.name && m.name.includes("Kandinsky"));
-    return model ? model.id : null;
+    // Ищем модель Kandinsky в ответе
+    const model = response.data.find(
+      (m) =>
+        m.name &&
+        (m.name.includes("Kandinsky") || m.nameEn.includes("Kandinsky"))
+    );
+
+    return model ? model.uuid : null;
   } catch (error) {
     console.error(
       "Полная ошибка при получении ID модели:",
@@ -54,7 +58,7 @@ async function generateImageWithFusionBrain(prompt) {
   try {
     const modelId = await getModelId();
     if (!modelId) {
-      throw new Error("Не удалось получить ID модели");
+      throw new Error("Не удалось получить ID модели Kandinsky");
     }
 
     const enhancedPrompt = `Психологическая цитата: "${prompt}".
@@ -63,8 +67,9 @@ async function generateImageWithFusionBrain(prompt) {
 
     console.log("Генерируем изображение для промпта:", enhancedPrompt);
 
+    // Используем правильный endpoint и параметры
     const generateResponse = await axios.post(
-      "https://api.fusionbrain.ai/key/api/v1/pipeline/run",
+      FUSIONBRAIN_URL + "key/api/v1/pipeline/run",
       {
         model_id: modelId,
         params: {
@@ -72,18 +77,14 @@ async function generateImageWithFusionBrain(prompt) {
           width: 1024,
           height: 1024,
           num_images: 1,
-          style: "DEFAULT", // Можно использовать: "DEFAULT", "KANDINSKY", "UHD"
+          style: "DEFAULT",
           generate_params: {
             query: enhancedPrompt,
           },
         },
       },
       {
-        headers: {
-          "X-Key": `Key ${FBAPI}`,
-          "X-Secret": `Secret ${FBSECRET}`,
-          "Content-Type": "application/json",
-        },
+        headers: AUTH_HEADERS,
         timeout: 30000,
       }
     );
@@ -91,29 +92,36 @@ async function generateImageWithFusionBrain(prompt) {
     const generationId = generateResponse.data.uuid;
     console.log("Запущена генерация с ID:", generationId);
 
-    // 4. Ждем завершения генерации
-    await new Promise((resolve) => setTimeout(resolve, 15000)); // Ждем 15 секунд
+    // Ждем завершения генерации
+    let attempts = 0;
+    const maxAttempts = 10;
 
-    // 5. Проверяем статус и получаем результат
-    const statusResponse = await axios.get(
-      `https://api.fusionbrain.ai/web/api/v1/text2image/status/${generationId}`,
-      {
-        headers: {
-          "X-Key": `Key ${process.env.FUSIONBRAIN_API_KEY}`,
-          "X-Secret": `Secret ${process.env.FUSIONBRAIN_SECRET_KEY}`,
-        },
-      }
-    );
+    while (attempts < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // Ждем 5 секунд
 
-    if (statusResponse.data.status === "DONE") {
-      const images = statusResponse.data.images;
-      if (images && images.length > 0) {
-        console.log("Изображение успешно сгенерировано");
-        return images[0]; // Возвращаем base64 строку
+      const statusResponse = await axios.get(
+        FUSIONBRAIN_URL + `key/api/v1/pipeline/status/${generationId}`,
+        {
+          headers: AUTH_HEADERS,
+        }
+      );
+
+      console.log("Статус генерации:", statusResponse.data.status);
+
+      if (statusResponse.data.status === "DONE") {
+        const images = statusResponse.data.images;
+        if (images && images.length > 0) {
+          console.log("Изображение успешно сгенерировано");
+          return images[0]; // Возвращаем base64 строку
+        }
+      } else if (statusResponse.data.status === "FAILED") {
+        throw new Error("Генерация не удалась");
       }
+
+      attempts++;
     }
 
-    throw new Error("Генерация не завершена или не удалась");
+    throw new Error("Превышено время ожидания генерации");
   } catch (error) {
     console.error(
       "Ошибка при генерации изображения FusionBrain:",
@@ -156,7 +164,7 @@ bot.on("message", async (msg) => {
     try {
       const waitingMessage = await bot.sendMessage(
         chatId,
-        "🔄 Генерируем уникальную цитату и изображение нейросетью... Это может занять 15-20 секунд."
+        "🔄 Генерируем уникальную цитату и изображение нейросетью... Это может зануть 15-20 секунд."
       );
 
       const quote = await getRandomQuote();
@@ -185,10 +193,8 @@ bot.on("message", async (msg) => {
   }
 });
 
-
-//Menu
-
-export function setMainMenu(chatId) {
+// Menu
+function setMainMenu(chatId) {
   const menuOptions = {
     reply_markup: {
       keyboard: [[{ text: "Получить цитату" }]],
@@ -203,11 +209,9 @@ export function setMainMenu(chatId) {
   );
 }
 
-//Errors
-
+// Errors
 bot.on("error", (error) => {
   console.error("Ошибка Telegram Bot API:", error);
 });
 
 console.log("🤖 Бот запущен и готов к работе с FusionBrain AI!");
-
