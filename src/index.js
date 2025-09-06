@@ -15,7 +15,6 @@ const missingVars = requiredEnvVars.filter((varName) => !process.env[varName]);
 
 if (missingVars.length > 0) {
   console.error("❌ Отсутствуют переменные окружения:", missingVars.join(", "));
-  console.error("Проверьте файл .env");
   process.exit(1);
 }
 
@@ -27,73 +26,70 @@ const AUTH_HEADERS = {
   "X-Secret": `Secret ${FBSECRET}`,
 };
 
-async function getModelId() {
+// Получаем pipeline_id (аналог get_pipeline из Python)
+async function getPipelineId() {
   try {
     const response = await axios.get(FUSIONBRAIN_URL + "key/api/v1/pipelines", {
       headers: AUTH_HEADERS,
     });
 
-    console.log("Статус ответа:", response.status);
-    console.log("Данные ответа:", response.data);
+    console.log("Доступные пайплайны:", response.data);
 
-    const model = response.data.find(
-      (m) =>
-        m.name &&
-        (m.name.includes("Kandinsky") || m.nameEn.includes("Kandinsky"))
-    );
-
-    if (model) {
-      console.log("Найдена модель:", model.name, "ID:", model.id);
-      return model.id;
-    } else {
-      console.log("Модель Kandinsky не найдена в ответе");
-      return null;
+    // Берем первый доступный пайплайн
+    if (response.data && response.data.length > 0) {
+      const pipelineId = response.data[0].id;
+      console.log("Используем pipeline ID:", pipelineId);
+      return pipelineId;
     }
+
+    return null;
   } catch (error) {
     console.error(
-      "Ошибка при получении ID модели:",
-      error.response?.status,
+      "Ошибка при получении pipeline ID:",
       error.response?.data || error.message
     );
     return null;
   }
 }
 
-async function generateImageWithFusionBrain(prompt) {
+// Запуск генерации (аналог generate из Python)
+async function generateImage(prompt, pipelineId) {
   try {
-    const modelId = await getModelId();
-    if (!modelId) {
-      throw new Error("Не удалось получить ID модели Kandinsky");
-    }
+    const enhancedPrompt = `PSYCHOLOGICAL CONCEPT: "${prompt}"
 
-    const enhancedPrompt = `Психологическая цитата: "${prompt}".
-    Абстрактное изображение в спокойных тонах, цифровое искусство,
-    психология, арт-терапия, метафорическое изображение, глубина`;
+CREATE a detailed metaphorical visual representation WITHOUT ANY TEXT.
 
-    console.log("Генерируем изображение для промпта:", enhancedPrompt);
+STRICT REQUIREMENTS:
+- ABSOLUTELY NO TEXT, WORDS, LETTERS, OR WRITING OF ANY KIND
+- NO inscriptions, labels, watermarks, signatures, or logos
+- NO text-like patterns or arrangements that could be mistaken for writing
 
-    // Создаем параметры согласно документации
+VISUAL METAPHORS ONLY:
+- Use natural elements: trees, water, light, landscapes
+- Abstract shapes and patterns that convey emotion
+- Color psychology and lighting to express meaning
+- Composition and perspective to tell the story
+
+BANNED: text, words, letters, numbers, writing, inscription, label, typography, font, alphabet, character, symbol, written, printed, watermark, signature, logo, brand, caption, subtitle, title, heading, paragraph, sentence, phrase, word art, calligraphy, handwriting, type, print, lettering, scribbles, marks, signs
+`;
+
     const params = {
       type: "GENERATE",
       numImages: 1,
-      width: 1024,
-      height: 1024,
-      style: "DEFAULT",
+      width: 648,
+      height: 648,
       generateParams: {
         query: enhancedPrompt,
       },
     };
 
-    // Создаем form-data как указано в документации
     const formData = new FormData();
-    formData.append("pipeline_id", modelId);
+    formData.append("pipeline_id", pipelineId);
     formData.append("params", JSON.stringify(params), {
       contentType: "application/json",
     });
 
-    console.log("Отправляем form-data с pipeline_id:", modelId);
-
-    const generateResponse = await axios.post(
+    const response = await axios.post(
       FUSIONBRAIN_URL + "key/api/v1/pipeline/run",
       formData,
       {
@@ -105,61 +101,114 @@ async function generateImageWithFusionBrain(prompt) {
       }
     );
 
-    console.log("Ответ генерации:", generateResponse.data);
+    console.log("Ответ запуска генерации:", response.data);
 
-    if (!generateResponse.data.uuid) {
+    if (response.data.uuid) {
+      return response.data.uuid;
+    } else {
       throw new Error("Не получили UUID генерации");
     }
-
-    const generationId = generateResponse.data.uuid;
-    console.log("Запущена генерация с ID:", generationId);
-
-    // Ждем завершения генерации
-    let attempts = 0;
-    const maxAttempts = 15;
-    const delayMs = 5000;
-
-    while (attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-
-      const statusResponse = await axios.get(
-        FUSIONBRAIN_URL + `key/api/v1/pipeline/status/${generationId}`,
-        {
-          headers: AUTH_HEADERS,
-        }
-      );
-
-      console.log("Статус генерации:", statusResponse.data.status);
-
-      if (statusResponse.data.status === "DONE") {
-        const images = statusResponse.data.images;
-        if (images && images.length > 0) {
-          console.log("Изображение успешно сгенерировано");
-          return images[0];
-        }
-      } else if (statusResponse.data.status === "FAILED") {
-        throw new Error(
-          "Генерация не удалась: " + JSON.stringify(statusResponse.data)
-        );
-      }
-
-      attempts++;
-    }
-
-    throw new Error("Превышено время ожидания генерации");
   } catch (error) {
     console.error(
-      "Ошибка при генерации изображения FusionBrain:",
+      "Ошибка при запуске генерации:",
       error.response?.data || error.message
     );
     return null;
   }
 }
 
-const bot = new TelegramBot(TOKEN, { polling: true });
+// Проверка статуса генерации (аналог check_generation из Python)
+async function checkGenerationStatus(requestId, attempts = 20, delay = 3000) {
+  try {
+    while (attempts > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
 
+      const response = await axios.get(
+        FUSIONBRAIN_URL + "key/api/v1/pipeline/status/" + requestId,
+        {
+          headers: AUTH_HEADERS,
+          timeout: 10000,
+        }
+      );
+
+      console.log("Статус генерации:", response.data.status);
+
+      if (response.data.status === "DONE") {
+        // ВОТ ОНО! Изображение в result.files как в Python примере
+        if (
+          response.data.result &&
+          response.data.result.files &&
+          response.data.result.files.length > 0
+        ) {
+          return response.data.result.files[0]; // Возвращаем URL или base64 изображения
+        } else {
+          console.log("❌ Файлы не найдены в result:", response.data.result);
+          return null;
+        }
+      } else if (response.data.status === "FAILED") {
+        console.log("❌ Генерация не удалась:", response.data);
+        return null;
+      }
+
+      attempts--;
+    }
+
+    console.log("⏰ Превышено время ожидания генерации");
+    return null;
+  } catch (error) {
+    console.error(
+      "Ошибка при проверке статуса:",
+      error.response?.data || error.message
+    );
+    return null;
+  }
+}
+
+// Основная функция для генерации изображения
+async function generateImageWithFusionBrain(prompt) {
+  try {
+    // 1. Получаем pipeline ID
+    const pipelineId = await getPipelineId();
+    if (!pipelineId) {
+      throw new Error("Не удалось получить pipeline ID");
+    }
+
+    // 2. Запускаем генерацию
+    const generationId = await generateImage(prompt, pipelineId);
+    if (!generationId) {
+      throw new Error("Не удалось запустить генерацию");
+    }
+
+    console.log("Запущена генерация с ID:", generationId);
+
+    // 3. Проверяем статус и получаем изображение
+    const imageFile = await checkGenerationStatus(generationId);
+    return imageFile;
+  } catch (error) {
+    console.error("Ошибка в generateImageWithFusionBrain:", error.message);
+    return null;
+  }
+}
+
+const bot = new TelegramBot(TOKEN, { polling: true });
 let userLastRequest = {};
 
+// Menu
+function setMainMenu(chatId) {
+  const menuOptions = {
+    reply_markup: {
+      keyboard: [[{ text: "Получить цитату" }]],
+    },
+    resize_keyboard: true,
+  };
+  bot.sendMessage(
+    chatId,
+    "Добро пожаловать! Нажми кнопку ниже, чтобы получить цитату.",
+    menuOptions
+  );
+}
+
+// Обработчики
 bot.onText(/\/start|\/help/, (msg) => {
   const chatId = msg.chat.id;
   if (!userLastRequest[chatId]) {
@@ -179,7 +228,7 @@ bot.on("message", async (msg) => {
     if (lastRequestDate && isSameDay(now, lastRequestDate)) {
       bot.sendMessage(
         chatId,
-        "На сегодня цитата уже получена. Возвращайтесь завтра за новой мудростью! 🌅"
+        "На сегодня цитата уже получена. Возвращайтесь завтра! 🌅"
       );
       return;
     }
@@ -189,19 +238,33 @@ bot.on("message", async (msg) => {
     try {
       const waitingMessage = await bot.sendMessage(
         chatId,
-        "🔄 Генерируем уникальную цитату и изображение нейросетью... Это может занять 15-20 секунд."
+        "🔄 Генерируем уникальную цитату и изображение... Это может занять 30-60 секунд."
       );
 
       const quote = await getRandomQuote();
-      const imageBase64 = await generateImageWithFusionBrain(quote.content);
+      const imageFile = await generateImageWithFusionBrain(quote.content);
 
       await bot.deleteMessage(chatId, waitingMessage.message_id);
 
-      if (imageBase64) {
-        const imageBuffer = Buffer.from(imageBase64, "base64");
-        await bot.sendPhoto(chatId, imageBuffer, {
-          caption: `${quote.text}\n\n🖼️ Изображение сгенерировано нейросетью FusionBrain`,
-        });
+      if (imageFile) {
+        // Проверяем тип файла (URL или base64)
+        if (imageFile.startsWith("http")) {
+          // Если это URL - скачиваем изображение
+          const imageResponse = await axios.get(imageFile, {
+            responseType: "arraybuffer",
+          });
+          await bot.sendPhoto(chatId, Buffer.from(imageResponse.data), {
+            caption: `${quote.text}\n\n🖼️ Изображение сгенерировано нейросетью FusionBrain`,
+          });
+        } else {
+          // Если это base64
+          const imageBuffer = Buffer.from(imageFile, "base64");
+          await bot.sendPhoto(chatId, imageBuffer, {
+            caption: `${quote.text}\n\n🖼️ Изображение сгенерировано нейросетью FusionBrain`,
+          });
+        }
+
+        console.log("✅ Изображение успешно отправлено");
       } else {
         await bot.sendMessage(
           chatId,
@@ -209,32 +272,14 @@ bot.on("message", async (msg) => {
         );
       }
     } catch (error) {
-      console.error("Общая ошибка в обработчике:", error);
-      await bot.sendMessage(
-        chatId,
-        "Произошла ошибка при обработке запроса. Попробуйте позже."
-      );
+      console.error("Ошибка:", error);
+      await bot.sendMessage(chatId, "Произошла ошибка. Попробуйте позже.");
     }
   }
 });
-
-function setMainMenu(chatId) {
-  const menuOptions = {
-    reply_markup: {
-      keyboard: [[{ text: "Получить цитату" }]],
-    },
-    resize_keyboard: true,
-    one_time_keyboard: false,
-  };
-  bot.sendMessage(
-    chatId,
-    "Добро пожаловать! Нажми кнопку ниже, чтобы получить цитату.",
-    menuOptions
-  );
-}
 
 bot.on("error", (error) => {
   console.error("Ошибка Telegram Bot API:", error);
 });
 
-console.log("🤖 Бот запущен и готов к работе с FusionBrain AI!");
+console.log("🤖 Бот запущен!");
