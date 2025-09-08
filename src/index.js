@@ -1,7 +1,7 @@
 import { getLocalQuote, isSameDay } from "./utils/index.js";
 
 import TelegramBot from "node-telegram-bot-api";
-import axios from "axios"
+import axios from "axios";
 
 const TOKEN = "8327969194:AAHoPBBxnHqbNeQvl7vUg5SY2xh5lErnXm0";
 
@@ -75,7 +75,11 @@ async function getRandomQuote() {
 export function setMainMenu(chatId) {
   const menuOptions = {
     reply_markup: {
-      keyboard: [[{ text: "Получить цитату" }]],
+      keyboard: [
+        [{ text: "Получить цитату" }],
+        [{ text: "Женский книжный клуб" }, { text: "Игра матрешка" }],
+        [{ text: "Обо мне " }],
+      ],
     },
     resize_keyboard: true,
     one_time_keyboard: false,
