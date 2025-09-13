@@ -252,7 +252,7 @@ async function handleAboutGame(chatId) {
     { parse_mode: "Markdown" }
   );
 
-  const videoPath = path.join(__dirname, "assets", "video", "matreshka.mp4");
+  const videoPath = path.join(__dirname, "assets", "video", "IMG_3328.mov");
   const videoStream = fs.createReadStream(videoPath);
   await bot.sendVideo(chatId, videoStream, {
     caption: `🎮 *Игра «Матрёшка»*
