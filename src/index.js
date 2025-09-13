@@ -261,6 +261,8 @@ async function handleAboutGame(chatId) {
 
 ✨ Собирает целостный образ вас и помогает получить завершение неоконченных ситуаций, которые вытягивают вашу энергию.`,
     parse_mode: "Markdown",
+    width: 1080,
+    height: 1920,
   });
 
   await bot.deleteMessage(chatId, typingMessage.message_id);
