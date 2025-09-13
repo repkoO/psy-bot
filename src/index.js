@@ -253,7 +253,7 @@ async function handleAboutGame(chatId) {
     { parse_mode: "Markdown" }
   );
 
-  const videoPath = path.join(__dirname, "assets", "video", "IMG_3328.mov");
+  const videoPath = path.join(__dirname, "assets", "video", "IMG_3328.mp4");
   const videoStream = fs.createReadStream(videoPath);
   await bot.sendVideo(chatId, videoStream, {
     caption: `🎮 *Игра «Матрёшка»*
@@ -274,7 +274,7 @@ async function handleAboutGame(chatId) {
 • ⚡ *Получить разрядку* незавершенных ситуаций
 • 💫 *Вернуть энергию*, которую забирают прошлые травмы
 • 🌱 *Создать новые стратегии* поведения`,
-    { parse_mode: "Markdonw" }
+    { parse_mode: "Markdown" }
   );
 
   await delay(1000);
