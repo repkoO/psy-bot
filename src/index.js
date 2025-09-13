@@ -180,31 +180,29 @@ async function handleWomensClub(chatId) {
 
 // Обо мне
 async function handleAboutMe(chatId) {
+  const typingMessage = await bot.sendMessage(
+    chatId,
+    "👤 *Загружаем информацию...*",
+    { parse_mode: "Markdown" }
+  );
   try {
-    const loadingMessage = await bot.sendMessage(
-      chatId,
+    const loadingMessages = [
       "✨ *Создаю пространство для знакомства...*",
-      { parse_mode: "Markdown" }
-    );
+      "🌱 *Приготовься узнать что-то важное о себе...*",
+      "💫 *Загружаю историю моей миссии...*",
+    ];
 
-    setTimeout(async () => {
-      await bot.editMessageText(
-        "🌱 *Приготовься узнать что-то важное о себе...*",
-        {
+    let currentLoadingMessage = 0;
+    const loadingInterval = setInterval(async () => {
+      if (currentLoadingMessage < loadingMessages.length) {
+        await bot.editMessageText(loadingMessages[currentLoadingMessage], {
           chat_id: chatId,
-          message_id: loadingMessage.message_id,
+          message_id: typingMessage.message_id,
           parse_mode: "Markdown",
-        }
-      );
+        });
+        currentLoadingMessage++;
+      }
     }, 1500);
-
-    setTimeout(async () => {
-      await bot.editMessageText("💫 *Загружаю историю моей миссии...*", {
-        chat_id: chatId,
-        message_id: loadingMessage.message_id,
-        parse_mode: "Markdown",
-      });
-    }, 3000);
 
     const photosDir = path.join(
       __dirname,
@@ -244,26 +242,21 @@ async function handleAboutMe(chatId) {
 • Хотите научиться слышать себя
 *Давайте знакомиться!* Ваш путь к себе начинается здесь.`;
 
-    setTimeout(async () => {
-      try {
-        await bot.deleteMessage(chatId, loadingMessage.message_id);
-      } catch {
-        await bot.sendPhoto(chatId, photosDir, {
-          caption: caption,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: "💫 Записаться на прием",
-                  url: "https://t.me/viktoria_albu",
-                },
-              ],
-            ],
-          },
-        });
-      }
-    }, 1000);
+    await bot.deleteMessage(chatId, typingMessage.message_id);
+    await bot.sendPhoto(chatId, photosDir, {
+      caption: caption,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "💫 Записаться на прием",
+              url: "https://t.me/viktoria_albu",
+            },
+          ],
+        ],
+      },
+    });
   } catch (error) {
     console.error("Ошибка при отправке фото 'Обо мне':", error);
     await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
