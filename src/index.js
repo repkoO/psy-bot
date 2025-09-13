@@ -1,13 +1,20 @@
+// Utils
 import { getLocalQuote, isSameDay } from "./utils/index.js";
+
+// Constants
+import { mainMenu, WELCOME_MESSAGE } from "./constants/menu.js";
+
+// Modules
+import { getRandomUnsplashImage } from "./modules/unsplash.js";
+
+// Packages
 
 import TelegramBot from "node-telegram-bot-api";
 import axios from "axios";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { mainMenu, WELCOME_MESSAGE } from "./constants/menu.js";
 import dotenv from "dotenv";
-import { getRandomUnsplashImage } from "./modules/unsplash.js";
 
 dotenv.config();
 

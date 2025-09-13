@@ -5,8 +5,8 @@ const mainMenu = {
       [{ text: "Женский книжный клуб" }, { text: "Игра матрешка" }],
       [{ text: "Обо мне" }],
     ],
+    resize_keyboard: true,
   },
-  resize_keyboard: true,
   one_time_keyboard: false,
 };
 
