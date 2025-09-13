@@ -71,7 +71,6 @@ async function getRandomQuote() {
 }
 
 //Menu
-
 export function setMainMenu(chatId) {
   const menuOptions = {
     reply_markup: {
