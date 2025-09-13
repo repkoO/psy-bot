@@ -2,6 +2,13 @@ import { getLocalQuote, isSameDay } from "./utils/index.js";
 
 import TelegramBot from "node-telegram-bot-api";
 import axios from "axios";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+import { mainMenu, WELCOME_MESSAGE } from "./constants/menu.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const TOKEN = "8327969194:AAHoPBBxnHqbNeQvl7vUg5SY2xh5lErnXm0";
 
@@ -39,10 +46,102 @@ bot.on("message", async (msg) => {
       const quote = await getRandomQuote();
       await bot.deleteMessage(chatId, waitingMessage.message_id);
       bot.sendMessage(chatId, quote.text);
-      console.log("Цитата для генерации изображения:", quote.content);
     }
+  } else if (text === "Женский книжный клуб") {
+    handleWomensClub(chatId);
+  } else if (text === "Обо мне") {
+    handleAboutMe(chatId);
   }
 });
+
+// Женский клуб
+async function handleWomensClub(chatId) {
+  try {
+    const photosDir = path.join(__dirname, "assets", "images", "womens");
+    const files = fs.readdirSync(photosDir);
+    const imageFiles = files
+      .filter((file) => /\.(jpg|jpeg|png|gif)$/i.test(file))
+      .slice(0, 5);
+
+    if (imageFiles.length === 0) {
+      await bot.sendMessage(chatId, "Фотографии временно недоступны.");
+      return;
+    }
+    const mediaGroup = imageFiles.map((file, index) => ({
+      type: "photo",
+      media: path.join(photosDir, file),
+      caption:
+        index === 0
+          ? `Женский книжный клуб 📚
+
+  <strong>Это пространство, для женщин и про женщин, которое создаётся вместе с вами 🕊️</strong>
+
+  Место, где через книги, фильмы, психологию и душевные разговоры, истории мы будем:
+
+    • Разбирать то, о чем обычно молчат.
+    • Находить поддержку.
+    • Учиться лучше понимать себя и других.
+    • Вдохновляться и вдохновлять.
+
+  <em>Без стереотипов. Без осуждения. Честно к себе.</em>`
+          : undefined,
+      parse_mode: "HTML",
+    }));
+
+    await bot.sendMediaGroup(chatId, mediaGroup);
+
+    await bot.sendMessage(chatId, "Хотите присоединиться к женскому клубу?", {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "📖 Записаться в книжный клуб",
+              url: "https://t.me/viktoria_albu",
+            },
+          ],
+        ],
+        resize_keyboard: true,
+      },
+    });
+  } catch (error) {
+    console.error("Ошибка при отправке фото книжного клуба:", error);
+    await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
+  }
+}
+
+// Обо мне
+async function handleAboutMe(chatId) {
+  try {
+    const photosDir = path.join(
+      __dirname,
+      "assets",
+      "images",
+      "self",
+      "IMG_2148.jpg"
+    );
+
+    const caption =
+      "Я профессиональный психолог с многолетним опытом работы. Специализируюсь на женской психологии, отношениях и личностном росте. Рада помочь вам на пути к гармонии!";
+
+    await bot.sendPhoto(chatId, photosDir, {
+      caption: caption,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "💫 Записаться на прием",
+              url: "https://t.me/viktoria_albu",
+            },
+          ],
+        ],
+      },
+    });
+  } catch (error) {
+    console.error("Ошибка при отправке фото 'Обо мне':", error);
+    await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
+  }
+}
 
 //Получение цитат
 
@@ -71,23 +170,9 @@ async function getRandomQuote() {
 }
 
 //Menu
-export function setMainMenu(chatId) {
-  const menuOptions = {
-    reply_markup: {
-      keyboard: [
-        [{ text: "Получить цитату" }],
-        [{ text: "Женский книжный клуб" }, { text: "Игра матрешка" }],
-        [{ text: "Обо мне " }],
-      ],
-    },
-    resize_keyboard: true,
-    one_time_keyboard: false,
-  };
-  bot.sendMessage(
-    chatId,
-    "Добро пожаловать! Нажми кнопку ниже, чтобы получить цитату.",
-    menuOptions
-  );
+
+function setMainMenu(chatId) {
+  bot.sendMessage(chatId, WELCOME_MESSAGE, mainMenu);
 }
 
 //Errors
