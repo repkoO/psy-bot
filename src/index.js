@@ -245,7 +245,7 @@ async function handleAboutMe(chatId) {
     await bot.deleteMessage(chatId, typingMessage.message_id);
     await bot.sendPhoto(chatId, photosDir, {
       caption: caption,
-      parse_mode: "HTML",
+      parse_mode: "Markdown",
       reply_markup: {
         inline_keyboard: [
           [
