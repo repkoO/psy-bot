@@ -136,6 +136,7 @@ async function getQuoteImage(chatId) {
     await bot.deleteMessage(chatId, waitingMessage.message_id);
   }
 }
+
 // Женский клуб
 async function handleWomensClub(chatId) {
   const typingMessage = await bot.sendMessage(
