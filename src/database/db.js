@@ -16,7 +16,8 @@ if (!fs.existsSync(dbDir)) {
 
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
-    console.error(err.message);
+    console.error("Database connection error:", err.message);
+    process.exit(1); // Exit if database connection fails
   } else {
     console.log("Connected to the database.");
     initDatabase();
@@ -34,7 +35,9 @@ function initDatabase() {
       last_name TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_activity DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+    )`, (err) => {
+      if (err) console.error("Error creating users table:", err.message);
+    });
 
     // Таблица действий
     db.run(`CREATE TABLE IF NOT EXISTS actions (
@@ -44,7 +47,9 @@ function initDatabase() {
       details TEXT,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users (id)
-    )`);
+    )`, (err) => {
+      if (err) console.error("Error creating actions table:", err.message);
+    });
 
     // Таблица цитат
     db.run(`CREATE TABLE IF NOT EXISTS quotes (
@@ -54,7 +59,9 @@ function initDatabase() {
       author TEXT,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users (id)
-    )`);
+    )`, (err) => {
+      if (err) console.error("Error creating quotes table:", err.message);
+    });
 
     // Таблица ошибок
     db.run(`CREATE TABLE IF NOT EXISTS errors (
@@ -64,7 +71,9 @@ function initDatabase() {
       stack_trace TEXT,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users (id)
-    )`);
+    )`, (err) => {
+      if (err) console.error("Error creating errors table:", err.message);
+    });
   });
 }
 
@@ -73,29 +82,37 @@ export const addUser = (chatId, userInfo) => {
     db.run(
       `INSERT OR IGNORE INTO users (chat_id, username, first_name, last_name)
        VALUES (?, ?, ?, ?)`,
-      [chatId, userInfo.username, userInfo.first_name, userInfo.last_name]
-    ),
+      [chatId, userInfo.username, userInfo.first_name, userInfo.last_name],
       function (err) {
         if (err) {
           reject(err);
         } else {
           resolve(this.lastID);
         }
-      };
+      }
+    );
   });
 };
 
 export const updateUserActivity = (chatId) => {
   db.run(
     `UPDATE users SET last_activity = CURRENT_TIMESTAMP WHERE chat_id = ?`,
-    [chatId]
+    [chatId],
+    (err) => {
+      if (err) {
+        console.error("Error updating user activity:", err.message);
+      }
+    }
   );
 };
 
-export const logAction = (chatId, actionType, details = null) => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const userId = await getUserId(chatId);
+export const logAction = async (chatId, actionType, details = null) => {
+  try {
+    const userId = await getUserId(chatId);
+    if (!userId) {
+      throw new Error(`User with chatId ${chatId} not found`);
+    }
+    return new Promise((resolve, reject) => {
       db.run(
         `INSERT INTO actions (user_id, action_type, details) VALUES (?, ?, ?)`,
         [userId, actionType, JSON.stringify(details)],
@@ -104,10 +121,10 @@ export const logAction = (chatId, actionType, details = null) => {
           else resolve();
         }
       );
-    } catch (error) {
-      reject(error);
-    }
-  });
+    });
+  } catch (error) {
+    return Promise.reject(error);
+  }
 };
 
 // Функции для статистики
@@ -159,11 +176,11 @@ export const getDailyStats = (days = 7) => {
         COUNT(*) as actions_count,
         COUNT(DISTINCT user_id) as unique_users
       FROM actions
-      WHERE timestamp >= date('now', ?)
+      WHERE timestamp >= date('now', '-' || ? || ' days')
       GROUP BY date(timestamp)
       ORDER BY date DESC
     `,
-      [`-${days} days`],
+      [days],
       (err, rows) => {
         if (err) reject(err);
         else resolve(rows);
