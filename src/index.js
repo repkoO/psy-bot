@@ -1,3 +1,6 @@
+// Database
+import { addUser, logAction, updateUserActivity } from "./database/db.js";
+
 // Utils
 import { getLocalQuote, isSameDay } from "./utils/index.js";
 import delay from "./utils/delay.js";
@@ -40,9 +43,18 @@ bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
+  try {
+    await addUser(chatId, msg.from);
+    await logAction(chatId, "message_received", { text });
+    updateUserActivity(chatId);
+  } catch (error) {
+    console.error("Ошибка логирования:", error);
+  }
+
   if (text === "/start" || text === "/help") {
     return;
   }
+
   switch (text) {
     case "🌅 Получить цитату":
       getQuoteImage(chatId);
@@ -63,142 +75,157 @@ bot.on("message", async (msg) => {
 
 // Цитаты
 async function getQuoteImage(chatId) {
-  const now = new Date();
-  const lastRequestDate = userLastRequest[chatId];
+  try {
+    await logAction(chatId, "quote_requested");
+    const now = new Date();
+    const lastRequestDate = userLastRequest[chatId];
 
-  if (lastRequestDate && isSameDay(now, lastRequestDate)) {
-    bot.sendMessage(
-      chatId,
-      `⏳ *На сегодня цитата уже получена*\n\nЗавтра вас ждет новая порция мудрости и вдохновения! 🌅\n\n*Возвращайтесь после полуночи* 💫`,
-      { parse_mode: "Markdown" }
-    );
-  } else {
-    userLastRequest[chatId] = now;
-    const waitingMessage = await bot.sendMessage(
-      chatId,
-      "🔍 *Ищем для вас идеальную цитату...*\n\n⏳ Подбираем соответствующее изображение...",
-      { parse_mode: "Markdown" }
-    );
-    const quote = await getRandomQuote();
-    const image = await getRandomUnsplashImage();
-    await bot.editMessageText("✅ *Готово!* Ваша цитата найдена 💫", {
-      chat_id: chatId,
-      message_id: waitingMessage.message_id,
-      parse_mode: "Markdown",
-    });
-    try {
-      if (image) {
-        const imagePath = await downloadImage(
-          image.url,
-          `quote_${Date.now()}.jpg`
-        );
-        if (imagePath) {
-          await bot.sendPhoto(chatId, imagePath, {
-            caption: `${quote.text}`,
-            parse_mode: "HTML",
-          });
-          fs.unlinkSync(imagePath);
+    if (lastRequestDate && isSameDay(now, lastRequestDate)) {
+      bot.sendMessage(
+        chatId,
+        `⏳ *На сегодня цитата уже получена*\n\nЗавтра вас ждет новая порция мудрости и вдохновения! 🌅\n\n*Возвращайтесь после полуночи* 💫`,
+        { parse_mode: "Markdown" }
+      );
+    } else {
+      userLastRequest[chatId] = now;
+      const waitingMessage = await bot.sendMessage(
+        chatId,
+        "🔍 *Ищем для вас идеальную цитату...*\n\n⏳ Подбираем соответствующее изображение...",
+        { parse_mode: "Markdown" }
+      );
+      const quote = await getRandomQuote();
+      const image = await getRandomUnsplashImage();
+      await bot.editMessageText("✅ *Готово!* Ваша цитата найдена 💫", {
+        chat_id: chatId,
+        message_id: waitingMessage.message_id,
+        parse_mode: "Markdown",
+      });
+      try {
+        if (image) {
+          const imagePath = await downloadImage(
+            image.url,
+            `quote_${Date.now()}.jpg`
+          );
+          if (imagePath) {
+            await bot.sendPhoto(chatId, imagePath, {
+              caption: `${quote.text}`,
+              parse_mode: "HTML",
+            });
+            fs.unlinkSync(imagePath);
+          } else {
+            await bot.sendMessage(chatId, quote.text);
+          }
         } else {
           await bot.sendMessage(chatId, quote.text);
         }
-      } else {
-        await bot.sendMessage(chatId, quote.text);
-      }
-    } catch {
-      if (image) {
-        const imagePath = await downloadImage(
-          image.url,
-          `quote_${Date.now()}.jpg`
-        );
-        if (imagePath) {
-          await bot.sendPhoto(chatId, imagePath, {
-            caption: `${quote.text}`,
-            parse_mode: "HTML",
-          });
-          fs.unlinkSync(imagePath);
+      } catch {
+        if (image) {
+          const imagePath = await downloadImage(
+            image.url,
+            `quote_${Date.now()}.jpg`
+          );
+          if (imagePath) {
+            await bot.sendPhoto(chatId, imagePath, {
+              caption: `${quote.text}`,
+              parse_mode: "HTML",
+            });
+            fs.unlinkSync(imagePath);
+          } else {
+            await bot.sendMessage(chatId, quote.text);
+          }
         } else {
           await bot.sendMessage(chatId, quote.text);
         }
-      } else {
-        await bot.sendMessage(chatId, quote.text);
       }
+      await bot.deleteMessage(chatId, waitingMessage.message_id);
+      await logAction(chatId, "quote_delivered", {
+        hasImage: !!image,
+        quoteLength: quote.text.length,
+      });
     }
-    await bot.deleteMessage(chatId, waitingMessage.message_id);
+  } catch (error) {
+    await logAction(chatId, "quote_error", { error: error.message });
   }
 }
 // Женский клуб
 async function handleWomensClub(chatId) {
-  const typingMessage = await bot.sendMessage(
-    chatId,
-    "👩‍👩‍👧‍👧 *Загружаем информацию о клубе...*",
-    { parse_mode: "Markdown" }
-  );
   try {
-    const photosDir = path.join(__dirname, "assets", "images", "womens");
-    const files = fs.readdirSync(photosDir);
-    const imageFiles = files
-      .filter((file) => /\.(jpg|jpeg|png|gif)$/i.test(file))
-      .slice(0, 5);
-
-    if (imageFiles.length === 0) {
-      await bot.sendMessage(chatId, "Фотографии временно недоступны.");
-      return;
-    }
-
-    await bot.deleteMessage(chatId, typingMessage.message_id);
-
-    const mediaGroup = imageFiles.map((file, index) => ({
-      type: "photo",
-      media: path.join(photosDir, file),
-      caption:
-        index === 0
-          ? `📚 *Женский книжный клуб*\n\n✨ *Пространство, создаваемое вместе с вами* 🕊️\n\n*Что мы делаем:*\n• 🗣️ Разбираем важные темы\n• 💖 Находим поддержку\n• 🌱 Учимся понимать себя\n• ✨ Вдохновляем и вдохновляемся\n\n*Без стереотипов. Без осуждения. Честно к себе.* 💫`
-          : undefined,
-      parse_mode: "Markdown",
-    }));
-
-    await bot.sendMediaGroup(chatId, mediaGroup);
-
-    await bot.sendMessage(
+    await logAction(chatId, "womens_club_opened");
+    const typingMessage = await bot.sendMessage(
       chatId,
-      "💫 *Хотите присоединиться к нашему сообществу?*",
-      {
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "📖 Записаться в книжный клуб",
-                url: "https://t.me/viktoria_albu",
-              },
-            ],
-          ],
-        },
-      }
+      "👩‍👩‍👧‍👧 *Загружаем информацию о клубе...*",
+      { parse_mode: "Markdown" }
     );
+    try {
+      const photosDir = path.join(__dirname, "assets", "images", "womens");
+      const files = fs.readdirSync(photosDir);
+      const imageFiles = files
+        .filter((file) => /\.(jpg|jpeg|png|gif)$/i.test(file))
+        .slice(0, 5);
+
+      if (imageFiles.length === 0) {
+        await bot.sendMessage(chatId, "Фотографии временно недоступны.");
+        return;
+      }
+
+      await bot.deleteMessage(chatId, typingMessage.message_id);
+
+      const mediaGroup = imageFiles.map((file, index) => ({
+        type: "photo",
+        media: path.join(photosDir, file),
+        caption:
+          index === 0
+            ? `📚 *Женский книжный клуб*\n\n✨ *Пространство, создаваемое вместе с вами* 🕊️\n\n*Что мы делаем:*\n• 🗣️ Разбираем важные темы\n• 💖 Находим поддержку\n• 🌱 Учимся понимать себя\n• ✨ Вдохновляем и вдохновляемся\n\n*Без стереотипов. Без осуждения. Честно к себе.* 💫`
+            : undefined,
+        parse_mode: "Markdown",
+      }));
+
+      await bot.sendMediaGroup(chatId, mediaGroup);
+
+      await bot.sendMessage(
+        chatId,
+        "💫 *Хотите присоединиться к нашему сообществу?*",
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "📖 Записаться в книжный клуб",
+                  url: "https://t.me/viktoria_albu",
+                },
+              ],
+            ],
+          },
+        }
+      );
+    } catch (error) {
+      console.error("Ошибка при отправке фото книжного клуба:", error);
+      await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
+    }
   } catch (error) {
-    console.error("Ошибка при отправке фото книжного клуба:", error);
-    await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
+    await logAction(chatId, "womens_club_error", { error: error.message });
   }
 }
 
 // Обо мне
 async function handleAboutMe(chatId) {
-  const typingMessage = await bot.sendMessage(
-    chatId,
-    "👤 *Загружаем информацию...*",
-    { parse_mode: "Markdown" }
-  );
   try {
-    const photosDir = path.join(
-      __dirname,
-      "assets",
-      "images",
-      "self",
-      "IMG_2148.jpg"
+    const typingMessage = await bot.sendMessage(
+      chatId,
+      "👤 *Загружаем информацию...*",
+      { parse_mode: "Markdown" }
     );
+    try {
+      const photosDir = path.join(
+        __dirname,
+        "assets",
+        "images",
+        "self",
+        "IMG_2148.jpg"
+      );
 
-    const caption = `🌿 *Виктория Албу*
+      const caption = `🌿 *Виктория Албу*
 
 *Гештальт-терапевт | Семейный психолог*
 
@@ -224,30 +251,35 @@ async function handleAboutMe(chatId) {
 • Хотите научиться слышать себя
 *Давайте знакомиться!* Ваш путь к себе начинается здесь.`;
 
-    await bot.deleteMessage(chatId, typingMessage.message_id);
-    await bot.sendPhoto(chatId, photosDir, {
-      caption: caption,
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "💫 Записаться на прием",
-              url: "https://t.me/viktoria_albu",
-            },
+      await bot.deleteMessage(chatId, typingMessage.message_id);
+      await bot.sendPhoto(chatId, photosDir, {
+        caption: caption,
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "💫 Записаться на прием",
+                url: "https://t.me/viktoria_albu",
+              },
+            ],
           ],
-        ],
-      },
-    });
+        },
+      });
+    } catch (error) {
+      console.error("Ошибка при отправке фото 'Обо мне':", error);
+      await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
+    }
   } catch (error) {
-    console.error("Ошибка при отправке фото 'Обо мне':", error);
-    await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
+    await logAction(chatId, "about_error", { error: error.message });
   }
 }
 
 // Матрешка
 async function handleAboutGame(chatId) {
-  const typingMessage = await bot.sendMessage(
+  try {
+ await logAction(chatId, 'game_opened');
+ const typingMessage = await bot.sendMessage(
     chatId,
     "👤 *Загружаем информацию...*",
     { parse_mode: "Markdown" }
@@ -341,6 +373,10 @@ async function handleAboutGame(chatId) {
       },
     }
   );
+  } catch (error) {
+        await logAction(chatId, 'game_error', { error: error.message });
+  }
+
 }
 
 //Получение цитат
