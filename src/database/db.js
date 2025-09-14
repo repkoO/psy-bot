@@ -85,7 +85,8 @@ export const addUser = (chatId, userInfo) => {
       [chatId, userInfo.username, userInfo.first_name, userInfo.last_name],
       function (err) {
         if (err) {
-          reject(err);
+          console.error('❌ Ошибка добавления пользователя:', err.message);
+          resolve(null);
         } else {
           resolve(this.lastID);
         }
@@ -149,8 +150,12 @@ export const getStats = () => {
       JOIN actions ON users.id = actions.user_id
     `,
       (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
+        if (err) {
+        console.error('❌ Ошибка получения статистики:', err.message);
+        resolve({ total_users: 0, total_actions: 0 });
+      } else {
+        resolve(row);
+      }
       }
     );
   });
@@ -168,8 +173,12 @@ export const getPopularActions = (limit = 10) => {
     `,
       [limit],
       (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
+       if (err) {
+        console.error('❌ Ошибка получения популярных действий:', err.message);
+        resolve([]);
+      } else {
+        resolve(rows || []);
+      }
       }
     );
   });
