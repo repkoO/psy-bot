@@ -66,6 +66,8 @@ bot.on("message", async (msg) => {
     case "Игра матрешка":
       handleAboutGame(chatId);
       break;
+    case "/admin_stats":
+      showAdminStats(chatId, msg.from.id);
     default:
       break;
   }
