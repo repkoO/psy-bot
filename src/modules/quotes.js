@@ -1,7 +1,7 @@
 // Получение цитат
 
 import axios from "axios";
-import { getLocalQuote } from "../utils";
+import { getLocalQuote } from "../utils/index.js";
 
 async function getRandomQuote() {
   try {
