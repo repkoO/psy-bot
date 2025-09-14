@@ -1,3 +1,13 @@
+// Database
+import {
+  addUser,
+  getDailyStats,
+  getPopularActions,
+  getStats,
+  logAction,
+  updateUserActivity
+} from "./database/db.js";
+
 // Utils
 import { getLocalQuote, isSameDay } from "./utils/index.js";
 import delay from "./utils/delay.js";
@@ -402,6 +412,39 @@ async function downloadImage(imageUrl, filename) {
   } catch (error) {
     console.error("Ошибка при загрузке изображения:", error.message);
     return null;
+  }
+}
+
+async function showAdminStats(chatId, userId) {
+  const ADMIN_ID = 258095033;
+  if (userId !== ADMIN_ID) {
+    await bot.sendMessage(chatId, "❌ Недостаточно прав");
+    return;
+  }
+
+  try {
+    const stats = await getStats();
+    const popularActions = await getPopularActions(5);
+    const dailyStats = await getDailyStats(7);
+
+    let message = `📊 Статистика бота\n\n`;
+    message += `👥 Всего пользователей: ${stats.total_users}\n`;
+    message += `🎯 Всего действий: ${stats.total_actions}\n`;
+    message += `📅 Активных дней: ${stats.active_days}\n\n`;
+
+    message += `🔥 Топ действий:\n`;
+    popularActions.forEach((action, index) => {
+      message += `${index + 1}. ${action.action_type}: ${action.count}\n`;
+    });
+
+    message += `\n📈 *Статистика за 7 дней:*\n`;
+    dailyStats.forEach((day) => {
+      message += `${day.date}: ${day.actions_count} действий (${day.unique_users} пользователей)\n`;
+    });
+    await bot.sendMessage(chatId, message);
+  } catch (error) {
+    console.error("Ошибка получения статистики:", error);
+    await bot.sendMessage(chatId, "❌ Ошибка получения статистики");
   }
 }
 
