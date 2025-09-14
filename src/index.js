@@ -3,6 +3,7 @@ import {
   addUser,
   getDailyStats,
   getPopularActions,
+  getStats,
   logAction,
   updateUserActivity
 } from "./database/db.js";
