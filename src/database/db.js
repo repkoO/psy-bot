@@ -105,26 +105,34 @@ export const updateUserActivity = (chatId) => {
     }
   );
 };
+export const logAction = (chatId, actionType, details = null) => {
+  return new Promise((resolve, reject) => {
+    db.get(`SELECT id FROM users WHERE chat_id = ?`, [chatId], (err, userRow) => {
+      if (err) {
+        console.error('❌ Ошибка поиска пользователя:', err.message);
+        resolve();
+        return;
+      }
 
-export const logAction = async (chatId, actionType, details = null) => {
-  try {
-    const userId = await getUserId(chatId);
-    if (!userId) {
-      throw new Error(`User with chatId ${chatId} not found`);
-    }
-    return new Promise((resolve, reject) => {
+      if (!userRow) {
+        console.log('⚠️ Пользователь не найден для логирования');
+        resolve();
+        return;
+      }
       db.run(
         `INSERT INTO actions (user_id, action_type, details) VALUES (?, ?, ?)`,
-        [userId, actionType, JSON.stringify(details)],
+        [userRow.id, actionType, JSON.stringify(details)],
         (err) => {
-          if (err) reject(err);
-          else resolve();
+          if (err) {
+            console.error('❌ Ошибка логирования действия:', err.message);
+            resolve();
+          } else {
+            resolve();
+          }
         }
       );
     });
-  } catch (error) {
-    return Promise.reject(error);
-  }
+  });
 };
 
 // Функции для статистики
