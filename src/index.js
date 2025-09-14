@@ -439,12 +439,12 @@ async function showAdminStats(chatId, userId) {
     const popularActions = await getPopularActions(5);
     const dailyStats = await getDailyStats(7);
 
-    let message = `📊 *Статистика бота*\n\n`;
+    let message = `📊 Статистика бота\n\n`;
     message += `👥 Всего пользователей: ${stats.total_users}\n`;
     message += `🎯 Всего действий: ${stats.total_actions}\n`;
     message += `📅 Активных дней: ${stats.active_days}\n\n`;
 
-    message += `🔥 *Топ действий:*\n`;
+    message += `🔥 Топ действий:\n`;
     popularActions.forEach((action, index) => {
       message += `${index + 1}. ${action.action_type}: ${action.count}\n`;
     });
@@ -453,7 +453,7 @@ async function showAdminStats(chatId, userId) {
     dailyStats.forEach((day) => {
       message += `${day.date}: ${day.actions_count} действий (${day.unique_users} пользователей)\n`;
     });
-    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    await bot.sendMessage(chatId, message);
   } catch (error) {
     console.error("Ошибка получения статистики:", error);
     await bot.sendMessage(chatId, "❌ Ошибка получения статистики");
