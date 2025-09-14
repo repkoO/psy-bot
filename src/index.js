@@ -1,14 +1,5 @@
-// Database
-import {
-  addUser,
-  getDailyStats,
-  getPopularActions,
-  logAction,
-  updateUserActivity
-} from "./database/db.js";
-
 // Utils
-import { isSameDay } from "./utils/index.js";
+import { getLocalQuote, isSameDay } from "./utils/index.js";
 import delay from "./utils/delay.js";
 
 // Constants
@@ -16,7 +7,6 @@ import { mainMenu, WELCOME_MESSAGE } from "./constants/menu.js";
 
 // Modules
 import { getRandomUnsplashImage } from "./modules/unsplash.js";
-import getRandomQuote from "./modules/quotes.js";
 
 // Packages
 
@@ -50,18 +40,9 @@ bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  try {
-    await addUser(chatId, msg.from);
-    await logAction(chatId, "message_received", { text });
-    updateUserActivity(chatId);
-  } catch (error) {
-    console.error("Ошибка логирования:", error);
-  }
-
   if (text === "/start" || text === "/help") {
     return;
   }
-
   switch (text) {
     case "🌅 Получить цитату":
       getQuoteImage(chatId);
@@ -75,9 +56,6 @@ bot.on("message", async (msg) => {
     case "Игра матрешка":
       handleAboutGame(chatId);
       break;
-    case "/admin_stats":
-      showAdminStats(chatId, msg.from.id);
-      break;
     default:
       break;
   }
@@ -85,157 +63,142 @@ bot.on("message", async (msg) => {
 
 // Цитаты
 async function getQuoteImage(chatId) {
-  try {
-    await logAction(chatId, "quote_requested");
-    const now = new Date();
-    const lastRequestDate = userLastRequest[chatId];
+  const now = new Date();
+  const lastRequestDate = userLastRequest[chatId];
 
-    if (lastRequestDate && isSameDay(now, lastRequestDate)) {
-      bot.sendMessage(
-        chatId,
-        `⏳ *На сегодня цитата уже получена*\n\nЗавтра вас ждет новая порция мудрости и вдохновения! 🌅\n\n*Возвращайтесь после полуночи* 💫`,
-        { parse_mode: "Markdown" }
-      );
-    } else {
-      userLastRequest[chatId] = now;
-      const waitingMessage = await bot.sendMessage(
-        chatId,
-        "🔍 *Ищем для вас идеальную цитату...*\n\n⏳ Подбираем соответствующее изображение...",
-        { parse_mode: "Markdown" }
-      );
-      const quote = await getRandomQuote();
-      const image = await getRandomUnsplashImage();
-      await bot.editMessageText("✅ *Готово!* Ваша цитата найдена 💫", {
-        chat_id: chatId,
-        message_id: waitingMessage.message_id,
-        parse_mode: "Markdown",
-      });
-      try {
-        if (image) {
-          const imagePath = await downloadImage(
-            image.url,
-            `quote_${Date.now()}.jpg`
-          );
-          if (imagePath) {
-            await bot.sendPhoto(chatId, imagePath, {
-              caption: `${quote.text}`,
-              parse_mode: "HTML",
-            });
-            fs.unlinkSync(imagePath);
-          } else {
-            await bot.sendMessage(chatId, quote.text);
-          }
+  if (lastRequestDate && isSameDay(now, lastRequestDate)) {
+    bot.sendMessage(
+      chatId,
+      `⏳ *На сегодня цитата уже получена*\n\nЗавтра вас ждет новая порция мудрости и вдохновения! 🌅\n\n*Возвращайтесь после полуночи* 💫`,
+      { parse_mode: "Markdown" }
+    );
+  } else {
+    userLastRequest[chatId] = now;
+    const waitingMessage = await bot.sendMessage(
+      chatId,
+      "🔍 *Ищем для вас идеальную цитату...*\n\n⏳ Подбираем соответствующее изображение...",
+      { parse_mode: "Markdown" }
+    );
+    const quote = await getRandomQuote();
+    const image = await getRandomUnsplashImage();
+    await bot.editMessageText("✅ *Готово!* Ваша цитата найдена 💫", {
+      chat_id: chatId,
+      message_id: waitingMessage.message_id,
+      parse_mode: "Markdown",
+    });
+    try {
+      if (image) {
+        const imagePath = await downloadImage(
+          image.url,
+          `quote_${Date.now()}.jpg`
+        );
+        if (imagePath) {
+          await bot.sendPhoto(chatId, imagePath, {
+            caption: `${quote.text}`,
+            parse_mode: "HTML",
+          });
+          fs.unlinkSync(imagePath);
         } else {
           await bot.sendMessage(chatId, quote.text);
         }
-      } catch {
-        if (image) {
-          const imagePath = await downloadImage(
-            image.url,
-            `quote_${Date.now()}.jpg`
-          );
-          if (imagePath) {
-            await bot.sendPhoto(chatId, imagePath, {
-              caption: `${quote.text}`,
-              parse_mode: "HTML",
-            });
-            fs.unlinkSync(imagePath);
-          } else {
-            await bot.sendMessage(chatId, quote.text);
-          }
-        } else {
-          await bot.sendMessage(chatId, quote.text);
-        }
+      } else {
+        await bot.sendMessage(chatId, quote.text);
       }
-      await bot.deleteMessage(chatId, waitingMessage.message_id);
-      await logAction(chatId, "quote_delivered", {
-        hasImage: !!image,
-        quoteLength: quote.text.length,
-      });
+    } catch {
+      if (image) {
+        const imagePath = await downloadImage(
+          image.url,
+          `quote_${Date.now()}.jpg`
+        );
+        if (imagePath) {
+          await bot.sendPhoto(chatId, imagePath, {
+            caption: `${quote.text}`,
+            parse_mode: "HTML",
+          });
+          fs.unlinkSync(imagePath);
+        } else {
+          await bot.sendMessage(chatId, quote.text);
+        }
+      } else {
+        await bot.sendMessage(chatId, quote.text);
+      }
     }
-  } catch (error) {
-    await logAction(chatId, "quote_error", { error: error.message });
+    await bot.deleteMessage(chatId, waitingMessage.message_id);
   }
 }
 // Женский клуб
 async function handleWomensClub(chatId) {
+  const typingMessage = await bot.sendMessage(
+    chatId,
+    "👩‍👩‍👧‍👧 *Загружаем информацию о клубе...*",
+    { parse_mode: "Markdown" }
+  );
   try {
-    await logAction(chatId, "womens_club_opened");
-    const typingMessage = await bot.sendMessage(
-      chatId,
-      "👩‍👩‍👧‍👧 *Загружаем информацию о клубе...*",
-      { parse_mode: "Markdown" }
-    );
-    try {
-      const photosDir = path.join(__dirname, "assets", "images", "womens");
-      const files = fs.readdirSync(photosDir);
-      const imageFiles = files
-        .filter((file) => /\.(jpg|jpeg|png|gif)$/i.test(file))
-        .slice(0, 5);
+    const photosDir = path.join(__dirname, "assets", "images", "womens");
+    const files = fs.readdirSync(photosDir);
+    const imageFiles = files
+      .filter((file) => /\.(jpg|jpeg|png|gif)$/i.test(file))
+      .slice(0, 5);
 
-      if (imageFiles.length === 0) {
-        await bot.sendMessage(chatId, "Фотографии временно недоступны.");
-        return;
-      }
-
-      await bot.deleteMessage(chatId, typingMessage.message_id);
-
-      const mediaGroup = imageFiles.map((file, index) => ({
-        type: "photo",
-        media: path.join(photosDir, file),
-        caption:
-          index === 0
-            ? `📚 *Женский книжный клуб*\n\n✨ *Пространство, создаваемое вместе с вами* 🕊️\n\n*Что мы делаем:*\n• 🗣️ Разбираем важные темы\n• 💖 Находим поддержку\n• 🌱 Учимся понимать себя\n• ✨ Вдохновляем и вдохновляемся\n\n*Без стереотипов. Без осуждения. Честно к себе.* 💫`
-            : undefined,
-        parse_mode: "Markdown",
-      }));
-
-      await bot.sendMediaGroup(chatId, mediaGroup);
-
-      await bot.sendMessage(
-        chatId,
-        "💫 *Хотите присоединиться к нашему сообществу?*",
-        {
-          parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: "📖 Записаться в книжный клуб",
-                  url: "https://t.me/viktoria_albu",
-                },
-              ],
-            ],
-          },
-        }
-      );
-    } catch (error) {
-      console.error("Ошибка при отправке фото книжного клуба:", error);
-      await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
+    if (imageFiles.length === 0) {
+      await bot.sendMessage(chatId, "Фотографии временно недоступны.");
+      return;
     }
+
+    await bot.deleteMessage(chatId, typingMessage.message_id);
+
+    const mediaGroup = imageFiles.map((file, index) => ({
+      type: "photo",
+      media: path.join(photosDir, file),
+      caption:
+        index === 0
+          ? `📚 *Женский книжный клуб*\n\n✨ *Пространство, создаваемое вместе с вами* 🕊️\n\n*Что мы делаем:*\n• 🗣️ Разбираем важные темы\n• 💖 Находим поддержку\n• 🌱 Учимся понимать себя\n• ✨ Вдохновляем и вдохновляемся\n\n*Без стереотипов. Без осуждения. Честно к себе.* 💫`
+          : undefined,
+      parse_mode: "Markdown",
+    }));
+
+    await bot.sendMediaGroup(chatId, mediaGroup);
+
+    await bot.sendMessage(
+      chatId,
+      "💫 *Хотите присоединиться к нашему сообществу?*",
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "📖 Записаться в книжный клуб",
+                url: "https://t.me/viktoria_albu",
+              },
+            ],
+          ],
+        },
+      }
+    );
   } catch (error) {
-    await logAction(chatId, "womens_club_error", { error: error.message });
+    console.error("Ошибка при отправке фото книжного клуба:", error);
+    await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
   }
 }
 
 // Обо мне
 async function handleAboutMe(chatId) {
+  const typingMessage = await bot.sendMessage(
+    chatId,
+    "👤 *Загружаем информацию...*",
+    { parse_mode: "Markdown" }
+  );
   try {
-    const typingMessage = await bot.sendMessage(
-      chatId,
-      "👤 *Загружаем информацию...*",
-      { parse_mode: "Markdown" }
+    const photosDir = path.join(
+      __dirname,
+      "assets",
+      "images",
+      "self",
+      "IMG_2148.jpg"
     );
-    try {
-      const photosDir = path.join(
-        __dirname,
-        "assets",
-        "images",
-        "self",
-        "IMG_2148.jpg"
-      );
 
-      const caption = `🌿 *Виктория Албу*
+    const caption = `🌿 *Виктория Албу*
 
 *Гештальт-терапевт | Семейный психолог*
 
@@ -261,57 +224,52 @@ async function handleAboutMe(chatId) {
 • Хотите научиться слышать себя
 *Давайте знакомиться!* Ваш путь к себе начинается здесь.`;
 
-      await bot.deleteMessage(chatId, typingMessage.message_id);
-      await bot.sendPhoto(chatId, photosDir, {
-        caption: caption,
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "💫 Записаться на прием",
-                url: "https://t.me/viktoria_albu",
-              },
-            ],
+    await bot.deleteMessage(chatId, typingMessage.message_id);
+    await bot.sendPhoto(chatId, photosDir, {
+      caption: caption,
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "💫 Записаться на прием",
+              url: "https://t.me/viktoria_albu",
+            },
           ],
-        },
-      });
-    } catch (error) {
-      console.error("Ошибка при отправке фото 'Обо мне':", error);
-      await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
-    }
+        ],
+      },
+    });
   } catch (error) {
-    await logAction(chatId, "about_error", { error: error.message });
+    console.error("Ошибка при отправке фото 'Обо мне':", error);
+    await bot.sendMessage(chatId, "Временно недоступно. Попробуйте позже.");
   }
 }
 
 // Матрешка
 async function handleAboutGame(chatId) {
-  try {
-    await logAction(chatId, "game_opened");
-    const typingMessage = await bot.sendMessage(
-      chatId,
-      "👤 *Загружаем информацию...*",
-      { parse_mode: "Markdown" }
-    );
+  const typingMessage = await bot.sendMessage(
+    chatId,
+    "👤 *Загружаем информацию...*",
+    { parse_mode: "Markdown" }
+  );
 
-    const videoPath = path.join(__dirname, "assets", "video", "IMG_3328.mp4");
-    const videoStream = fs.createReadStream(videoPath);
+  const videoPath = path.join(__dirname, "assets", "video", "IMG_3328.mp4");
+  const videoStream = fs.createReadStream(videoPath);
 
-    await bot.sendVideo(chatId, videoStream, {
-      caption: `🎮 *Игра «Матрёшка»*
+  await bot.sendVideo(chatId, videoStream, {
+    caption: `🎮 *Игра «Матрёшка»*
 
 ✨ Собирает целостный образ вас и помогает получить завершение неоконченных ситуаций, которые вытягивают вашу энергию.`,
-      parse_mode: "Markdown",
-      width: 1080,
-      height: 1920,
-    });
+    parse_mode: "Markdown",
+    width: 1080,
+    height: 1920,
+  });
 
-    await bot.deleteMessage(chatId, typingMessage.message_id);
+  await bot.deleteMessage(chatId, typingMessage.message_id);
 
-    await bot.sendMessage(
-      chatId,
-      `🎯 *Что такое игра «Матрёшка»?*
+  await bot.sendMessage(
+    chatId,
+    `🎯 *Что такое игра «Матрёшка»?*
 
 ✨ *Это глубокая психологическая практика*, которая помогает:
 
@@ -319,14 +277,14 @@ async function handleAboutGame(chatId) {
 • ⚡ Получить разрядку незавершенных ситуаций
 • 💫 Вернуть энергию, которую забирают прошлые травмы
 • 🌱 Создать новые стратегии поведения`,
-      { parse_mode: "Markdown" }
-    );
+    { parse_mode: "Markdown" }
+  );
 
-    await delay(1000);
+  await delay(1000);
 
-    await bot.sendMessage(
-      chatId,
-      `*Машина — это больше, чем набор деталей*
+  await bot.sendMessage(
+    chatId,
+    `*Машина — это больше, чем набор деталей*
 *Человек — больше, чем набор органов*
 
 🧸 Символика матрёшек:
@@ -353,14 +311,14 @@ async function handleAboutGame(chatId) {
 • 💖 Гармоничных отношений с собой
 • 🌍 Гармонии с миром и другими людьми
 • 🧘 Целостности и самопринятия`,
-      { parse_mode: "Markdown" }
-    );
+    { parse_mode: "Markdown" }
+  );
 
-    await delay(1000);
+  await delay(1000);
 
-    await bot.sendMessage(
-      chatId,
-      `🌱 *Результат:*
+  await bot.sendMessage(
+    chatId,
+    `🌱 *Результат:*
 • Формируются новые поведенческие стратегии
 • Разрешаются глубинные запросы
 • Возвращается энергия и радость жизни
@@ -374,17 +332,40 @@ async function handleAboutGame(chatId) {
 • 🌈 Преобразования жизни
 
 🎮 Хотите попробовать?`,
-      {
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Играть", url: "https://t.me/viktoria_albu" }],
-          ],
-        },
-      }
-    );
-  } catch (error) {
-    await logAction(chatId, "game_error", { error: error.message });
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Играть", url: "https://t.me/viktoria_albu" }],
+        ],
+      },
+    }
+  );
+}
+
+//Получение цитат
+
+async function getRandomQuote() {
+  try {
+    const response = await axios.get("https://api.forismatic.com/api/1.0/", {
+      params: {
+        method: "getQuote",
+        lang: "ru",
+        format: "json",
+      },
+    });
+
+    const quoteData = response.data;
+    const author = quoteData.quoteAuthor || "Неизвестный автор";
+    const fullQuoteText = `${quoteData.quoteText} — © ${author}`;
+
+    return {
+      text: fullQuoteText,
+      content: quoteData.quoteText,
+    };
+  } catch {
+    console.error();
+    return getLocalQuote();
   }
 }
 
@@ -421,41 +402,6 @@ async function downloadImage(imageUrl, filename) {
   } catch (error) {
     console.error("Ошибка при загрузке изображения:", error.message);
     return null;
-  }
-}
-
-// Статистика для админа
-
-async function showAdminStats(chatId, userId) {
-  const ADMIN_ID = 258095033;
-  if (userId !== ADMIN_ID) {
-    await bot.sendMessage(chatId, "❌ Недостаточно прав");
-    return;
-  }
-
-  try {
-    const stats = await getStats();
-    const popularActions = await getPopularActions(5);
-    const dailyStats = await getDailyStats(7);
-
-    let message = `📊 *Статистика бота*\n\n`;
-    message += `👥 Всего пользователей: ${stats.total_users}\n`;
-    message += `🎯 Всего действий: ${stats.total_actions}\n`;
-    message += `📅 Активных дней: ${stats.active_days}\n\n`;
-
-    message += `🔥 *Топ действий:*\n`;
-    popularActions.forEach((action, index) => {
-      message += `${index + 1}. ${action.action_type}: ${action.count}\n`;
-    });
-
-    message += `\n📈 *Статистика за 7 дней:*\n`;
-    dailyStats.forEach((day) => {
-      message += `${day.date}: ${day.actions_count} действий (${day.unique_users} пользователей)\n`;
-    });
-    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-  } catch (error) {
-    console.error("Ошибка получения статистики:", error);
-    await bot.sendMessage(chatId, "❌ Ошибка получения статистики");
   }
 }
 
