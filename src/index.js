@@ -1,8 +1,14 @@
 // Database
-import { addUser, logAction, updateUserActivity } from "./database/db.js";
+import {
+  addUser,
+  getDailyStats,
+  getPopularActions,
+  logAction,
+  updateUserActivity
+} from "./database/db.js";
 
 // Utils
-import { getLocalQuote, isSameDay } from "./utils/index.js";
+import { isSameDay } from "./utils/index.js";
 import delay from "./utils/delay.js";
 
 // Constants
@@ -10,6 +16,7 @@ import { mainMenu, WELCOME_MESSAGE } from "./constants/menu.js";
 
 // Modules
 import { getRandomUnsplashImage } from "./modules/unsplash.js";
+import getRandomQuote from "./modules/quotes.js";
 
 // Packages
 
@@ -67,6 +74,9 @@ bot.on("message", async (msg) => {
       break;
     case "Игра матрешка":
       handleAboutGame(chatId);
+      break;
+    case "/admin_stats":
+      showAdminStats(chatId, msg.from.id);
       break;
     default:
       break;
@@ -278,30 +288,30 @@ async function handleAboutMe(chatId) {
 // Матрешка
 async function handleAboutGame(chatId) {
   try {
- await logAction(chatId, 'game_opened');
- const typingMessage = await bot.sendMessage(
-    chatId,
-    "👤 *Загружаем информацию...*",
-    { parse_mode: "Markdown" }
-  );
+    await logAction(chatId, "game_opened");
+    const typingMessage = await bot.sendMessage(
+      chatId,
+      "👤 *Загружаем информацию...*",
+      { parse_mode: "Markdown" }
+    );
 
-  const videoPath = path.join(__dirname, "assets", "video", "IMG_3328.mp4");
-  const videoStream = fs.createReadStream(videoPath);
+    const videoPath = path.join(__dirname, "assets", "video", "IMG_3328.mp4");
+    const videoStream = fs.createReadStream(videoPath);
 
-  await bot.sendVideo(chatId, videoStream, {
-    caption: `🎮 *Игра «Матрёшка»*
+    await bot.sendVideo(chatId, videoStream, {
+      caption: `🎮 *Игра «Матрёшка»*
 
 ✨ Собирает целостный образ вас и помогает получить завершение неоконченных ситуаций, которые вытягивают вашу энергию.`,
-    parse_mode: "Markdown",
-    width: 1080,
-    height: 1920,
-  });
+      parse_mode: "Markdown",
+      width: 1080,
+      height: 1920,
+    });
 
-  await bot.deleteMessage(chatId, typingMessage.message_id);
+    await bot.deleteMessage(chatId, typingMessage.message_id);
 
-  await bot.sendMessage(
-    chatId,
-    `🎯 *Что такое игра «Матрёшка»?*
+    await bot.sendMessage(
+      chatId,
+      `🎯 *Что такое игра «Матрёшка»?*
 
 ✨ *Это глубокая психологическая практика*, которая помогает:
 
@@ -309,14 +319,14 @@ async function handleAboutGame(chatId) {
 • ⚡ Получить разрядку незавершенных ситуаций
 • 💫 Вернуть энергию, которую забирают прошлые травмы
 • 🌱 Создать новые стратегии поведения`,
-    { parse_mode: "Markdown" }
-  );
+      { parse_mode: "Markdown" }
+    );
 
-  await delay(1000);
+    await delay(1000);
 
-  await bot.sendMessage(
-    chatId,
-    `*Машина — это больше, чем набор деталей*
+    await bot.sendMessage(
+      chatId,
+      `*Машина — это больше, чем набор деталей*
 *Человек — больше, чем набор органов*
 
 🧸 Символика матрёшек:
@@ -343,14 +353,14 @@ async function handleAboutGame(chatId) {
 • 💖 Гармоничных отношений с собой
 • 🌍 Гармонии с миром и другими людьми
 • 🧘 Целостности и самопринятия`,
-    { parse_mode: "Markdown" }
-  );
+      { parse_mode: "Markdown" }
+    );
 
-  await delay(1000);
+    await delay(1000);
 
-  await bot.sendMessage(
-    chatId,
-    `🌱 *Результат:*
+    await bot.sendMessage(
+      chatId,
+      `🌱 *Результат:*
 • Формируются новые поведенческие стратегии
 • Разрешаются глубинные запросы
 • Возвращается энергия и радость жизни
@@ -364,44 +374,17 @@ async function handleAboutGame(chatId) {
 • 🌈 Преобразования жизни
 
 🎮 Хотите попробовать?`,
-    {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "Играть", url: "https://t.me/viktoria_albu" }],
-        ],
-      },
-    }
-  );
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Играть", url: "https://t.me/viktoria_albu" }],
+          ],
+        },
+      }
+    );
   } catch (error) {
-        await logAction(chatId, 'game_error', { error: error.message });
-  }
-
-}
-
-//Получение цитат
-
-async function getRandomQuote() {
-  try {
-    const response = await axios.get("https://api.forismatic.com/api/1.0/", {
-      params: {
-        method: "getQuote",
-        lang: "ru",
-        format: "json",
-      },
-    });
-
-    const quoteData = response.data;
-    const author = quoteData.quoteAuthor || "Неизвестный автор";
-    const fullQuoteText = `${quoteData.quoteText} — © ${author}`;
-
-    return {
-      text: fullQuoteText,
-      content: quoteData.quoteText,
-    };
-  } catch {
-    console.error();
-    return getLocalQuote();
+    await logAction(chatId, "game_error", { error: error.message });
   }
 }
 
@@ -438,6 +421,41 @@ async function downloadImage(imageUrl, filename) {
   } catch (error) {
     console.error("Ошибка при загрузке изображения:", error.message);
     return null;
+  }
+}
+
+// Статистика для админа
+
+async function showAdminStats(chatId, userId) {
+  const ADMIN_ID = 258095033;
+  if (userId !== ADMIN_ID) {
+    await bot.sendMessage(chatId, "❌ Недостаточно прав");
+    return;
+  }
+
+  try {
+    const stats = await getStats();
+    const popularActions = await getPopularActions(5);
+    const dailyStats = await getDailyStats(7);
+
+    let message = `📊 *Статистика бота*\n\n`;
+    message += `👥 Всего пользователей: ${stats.total_users}\n`;
+    message += `🎯 Всего действий: ${stats.total_actions}\n`;
+    message += `📅 Активных дней: ${stats.active_days}\n\n`;
+
+    message += `🔥 *Топ действий:*\n`;
+    popularActions.forEach((action, index) => {
+      message += `${index + 1}. ${action.action_type}: ${action.count}\n`;
+    });
+
+    message += `\n📈 *Статистика за 7 дней:*\n`;
+    dailyStats.forEach((day) => {
+      message += `${day.date}: ${day.actions_count} действий (${day.unique_users} пользователей)\n`;
+    });
+    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+  } catch (error) {
+    console.error("Ошибка получения статистики:", error);
+    await bot.sendMessage(chatId, "❌ Ошибка получения статистики");
   }
 }
 
